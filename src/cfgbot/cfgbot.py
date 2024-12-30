@@ -89,7 +89,7 @@ def render(func: Func, sourcefile: Path):
     if not sourcefile.exists():
         raise RuntimeError(f"Missing source file! {sourcefile}")
     svg = subprocess.check_output(
-        ["bun", "run", RENDER_SCRIPT, str(sourcefile.absolute()), orjson.dumps(func.start_position)]
+        ["bun", "run", RENDER_SCRIPT, str(sourcefile.absolute()), orjson.dumps(attrs.asdict(func.start_position))]
     )
     png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
     img = Image.open(io.BytesIO(png))
