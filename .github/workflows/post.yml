@@ -37,6 +37,7 @@ jobs:
             Lib
 
       - run: ls projects/CPython
+      - run: ls /home/runner/work/cfgbot/cfgbot/projects/CPython/Python/ast.c
 
       # Render and post
       - run: uv run cfgbot
