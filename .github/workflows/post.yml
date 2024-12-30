@@ -38,6 +38,7 @@ jobs:
 
       - run: ls projects/CPython
       - run: ls /home/runner/work/cfgbot/cfgbot/projects/CPython/Python/ast.c
+      - run: ls /home/runner/work/cfgbot/cfgbot/projects/CPython/Lib/test/test_exception_hierarchy.py
 
       # Render and post
       - run: uv run cfgbot
