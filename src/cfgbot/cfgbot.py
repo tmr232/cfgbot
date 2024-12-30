@@ -98,6 +98,7 @@ def render(func: Func, sourcefile: Path, colors: Path | None = None):
                     RENDER_SCRIPT,
                     str(sourcefile.absolute()),
                     orjson.dumps(attrs.asdict(func.start_position)),
+                    "--colors" if colors else None,
                     str(colors.absolute()) if colors else None,
                 ],
             )
