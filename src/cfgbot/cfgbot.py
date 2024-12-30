@@ -104,7 +104,7 @@ def main():
     function, index = choose_function()
     rich.print(function)
     image_bytes, (width, height) = render(
-        function, Path(SOURCE_ROOT) / os.path.normpath(index.root) / function.file
+        function, Path(SOURCE_ROOT) / os.path.normpath(index.root) / os.path.normpath(function.file)
     )
 
     title = f"{index.name}/{Path(function.file).as_posix()}:{function.start_position.row+1}:{function.func_def}"
