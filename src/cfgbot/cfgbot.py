@@ -85,9 +85,9 @@ def choose_function() -> Tuple[Func, Index]:
 
 
 def render(func: Func, sourcefile: Path):
-    rich.print(sourcefile)
+    rich.print(sourcefile.absolute())
     if not sourcefile.exists():
-        raise RuntimeError(f"Missing source file! {sourcefile}")
+        raise RuntimeError(f"Missing source file! {sourcefile.absolute()}")
     svg = subprocess.check_output(
         ["bun", "run", RENDER_SCRIPT, str(sourcefile.absolute()), orjson.dumps(attrs.asdict(func.start_position))]
     )
