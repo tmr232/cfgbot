@@ -1,0 +1,45 @@
+name: Post on Bluesky
+on:
+  schedule:
+    - cron: "33 * * * *"
+  workflow_dispatch:
+
+jobs:
+  post:
+    name: "Post"
+    runs-on: "ubuntu-latest"
+    steps:
+      # Clone and install the Python project
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+
+      # Clone and install the typescript scripts
+      - uses: actions/checkout@v4
+        with:
+          repository: "tmr232/function-graph-overview"
+          ref: "cfgbot"
+          path: "function-graph-overview"
+
+      - uses: oven-sh/setup-bun@v2
+      - run: |
+          cd function-graph-overview
+          bun install
+
+      # Clone the code to render
+      - uses: actions/checkout@v4
+        with:
+          repository: "python/cpython"
+          ref: "2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd"
+          path: "projects/CPython"
+          sparse-checkout: |
+            Python
+            Lib
+
+      # Render and post
+      - run: uv run cfgbot
+        env:
+          CFG_RENDER_SCRIPT: "function-graph-overview/scripts/render-function.ts"
+          CLONE_SOURCE_ROOT: "projects"
+          BLUESKY_IDENTIFIER: ${{ secrets.BLUESKY_IDENTIFIER }}
+          BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}

@@ -1,0 +1,24 @@
+[project]
+name = "cfgbot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "atproto>=0.0.56",
+    "attrs>=24.3.0",
+    "cairosvg>=2.7.1",
+    "keyring>=25.6.0",
+    "orjson>=3.10.13",
+    "pillow>=11.0.0",
+    "rich>=13.9.4",
+    "ruff>=0.8.4",
+    "typer>=0.15.1",
+    "urllib3>=2.3.0",
+]
+
+[project.scripts]
+cfgbot = "cfgbot.cfgbot:app"
+
+[tool.uv]
+package = true
