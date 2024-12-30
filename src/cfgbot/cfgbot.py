@@ -52,12 +52,12 @@ class Index:
 
 
 INDICES = [
-    # Index(
-    #     name="Python/CPython/Lib",
-    #     index_name="cpython_lib.json",
-    #     github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Lib/",
-    #     root = "CPython/Lib"
-    # ),
+    Index(
+        name="Python/CPython/Lib",
+        index_name="cpython_lib.json",
+        github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Lib/",
+        root = "CPython/Lib"
+    ),
     Index(
         name="Python/CPython/Python",
         index_name="cpython_python.json",
