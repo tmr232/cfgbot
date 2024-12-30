@@ -116,7 +116,7 @@ def main():
         ),
     )
 
-    title = f"{index.name}/{Path(function.file).as_posix()}:{function.start_position.row+1}:{function.func_def}"
+    title = f"{index.name}/{function.file.replace("\\", "/")}:{function.start_position.row+1}:{function.func_def}"
     link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row+1}"
 
     client = Client()
