@@ -99,7 +99,7 @@ def render(func: Func, sourcefile: Path, colors: Path | None = None):
                     str(sourcefile.absolute()),
                     orjson.dumps(attrs.asdict(func.start_position)),
                     "--colors" if colors else None,
-                    str(colors.absolute()) if colors else None,
+                    str(os.path.normpath(colors.absolute())) if colors else None,
                 ],
             )
         )
