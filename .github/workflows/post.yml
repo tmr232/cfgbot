@@ -36,6 +36,8 @@ jobs:
             Python
             Lib
 
+      - run: ls projects/CPython
+
       # Render and post
       - run: uv run cfgbot
         env:
