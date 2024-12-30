@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "scheme": [
+    {
+      "name": "node.default",
+      "hex": "#000000"
+    },
+    {
+      "name": "node.entry",
+      "hex": "#000000"
+    },
+    {
+      "name": "node.exit",
+      "hex": "#000000"
+    },
+    {
+      "name": "node.throw",
+      "hex": "#000000"
+    },
+    {
+      "name": "node.yield",
+      "hex": "#000000"
+    },
+    {
+      "name": "node.border",
+      "hex": "#FF00FF"
+    },
+    {
+      "name": "node.highlight",
+      "hex": "#ff00ff"
+    },
+    {
+      "name": "edge.regular",
+      "hex": "#00FF00"
+    },
+    {
+      "name": "edge.consequence",
+      "hex": "#00FF00"
+    },
+    {
+      "name": "edge.alternative",
+      "hex": "#00FF00"
+    },
+    {
+      "name": "cluster.border",
+      "hex": "#000000"
+    },
+    {
+      "name": "cluster.with",
+      "hex": "#000000"
+    },
+    {
+      "name": "cluster.tryComplex",
+      "hex": "#000000"
+    },
+    {
+      "name": "cluster.try",
+      "hex": "#000000"
+    },
+    {
+      "name": "cluster.finally",
+      "hex": "#000000"
+    },
+    {
+      "name": "cluster.except",
+      "hex": "#000000"
+    },
+    {
+      "name": "graph.background",
+      "hex": "#000000"
+    }
+  ]
+}

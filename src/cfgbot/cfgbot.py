@@ -84,18 +84,24 @@ def choose_function() -> Tuple[Func, Index]:
     return Func(**entry), index
 
 
-def render(func: Func, sourcefile: Path):
+def render(func: Func, sourcefile: Path, colors: Path | None = None):
     rich.print(sourcefile.absolute())
     if not sourcefile.exists():
         raise RuntimeError(f"Missing source file! {sourcefile.absolute()}")
     svg = subprocess.check_output(
-        [
-            "bun",
-            "run",
-            RENDER_SCRIPT,
-            str(sourcefile.absolute()),
-            orjson.dumps(attrs.asdict(func.start_position)),
-        ]
+        list(
+            filter(
+                None,
+                [
+                    "bun",
+                    "run",
+                    RENDER_SCRIPT,
+                    str(sourcefile.absolute()),
+                    orjson.dumps(attrs.asdict(func.start_position)),
+                    str(colors.absolute()) if colors else None,
+                ],
+            )
+        )
     )
     png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
     img = Image.open(io.BytesIO(png))
@@ -105,16 +111,29 @@ def render(func: Func, sourcefile: Path):
     return result_data.getvalue(), (img.width, img.height)
 
 
+def get_color_scheme(name: str) -> Path:
+    return Path(__file__, "..", "color-schemes", f"{name}.json")
+
+
 @app.command()
 def main():
     function, index = choose_function()
     rich.print(function)
-    image_bytes, (width, height) = render(
-        function,
-        Path(
-            SOURCE_ROOT, index.root.replace("\\", "/"), function.file.replace("\\", "/")
-        ),
+    sourcepath = Path(
+        SOURCE_ROOT, index.root.replace("\\", "/"), function.file.replace("\\", "/")
     )
+    images = []
+    image_alts = []
+    image_aspect_ratios = []
+    for scheme_name in ("dark", "light"):
+        image_bytes, (width, height) = render(
+            function, sourcepath, get_color_scheme(scheme_name)
+        )
+        images.append(image_bytes)
+        image_alts.append(
+            f"A control-flow-graph of the function described in the post text using a {scheme_name} color scheme."
+        )
+        image_aspect_ratios.append(AspectRatio(height=height, width=width))
 
     title = f"{index.name}/{function.file.replace("\\", "/")}:{function.start_position.row+1}:{function.func_def}"
     link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row+1}"
@@ -131,9 +150,7 @@ def main():
             link,
         )
     )
-    client.send_image(
-        text,
-        image_bytes,
-        image_alt="A control-flow-graph of the function described in the post text.",
-        image_aspect_ratio=AspectRatio(height=height, width=width),
+
+    client.send_images(
+        text, images, image_alts, image_aspect_ratios=image_aspect_ratios
     )
