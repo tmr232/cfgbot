@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: "tmr232/function-graph-overview"
-          ref: "cfgbot"
+          ref: "bsky-bot"
           path: "function-graph-overview"
 
       - uses: oven-sh/setup-bun@v2
