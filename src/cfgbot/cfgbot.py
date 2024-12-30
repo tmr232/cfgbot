@@ -56,14 +56,14 @@ INDICES = [
         name="Python/CPython/Lib",
         index_name="cpython_lib.json",
         github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Lib/",
-        root = "CPython/Lib"
+        root="CPython/Lib",
     ),
     Index(
         name="Python/CPython/Python",
         index_name="cpython_python.json",
         github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Python/",
         root="CPython/Python",
-    )
+    ),
 ]
 
 app = typer.Typer()
@@ -89,7 +89,13 @@ def render(func: Func, sourcefile: Path):
     if not sourcefile.exists():
         raise RuntimeError(f"Missing source file! {sourcefile.absolute()}")
     svg = subprocess.check_output(
-        ["bun", "run", RENDER_SCRIPT, str(sourcefile.absolute()), orjson.dumps(attrs.asdict(func.start_position))]
+        [
+            "bun",
+            "run",
+            RENDER_SCRIPT,
+            str(sourcefile.absolute()),
+            orjson.dumps(attrs.asdict(func.start_position)),
+        ]
     )
     png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
     img = Image.open(io.BytesIO(png))
@@ -104,7 +110,10 @@ def main():
     function, index = choose_function()
     rich.print(function)
     image_bytes, (width, height) = render(
-        function, Path(SOURCE_ROOT) / os.path.normpath(index.root) / os.path.normpath(function.file)
+        function,
+        Path(
+            SOURCE_ROOT, index.root.replace("\\", "/"), function.file.replace("\\", "/")
+        ),
     )
 
     title = f"{index.name}/{Path(function.file).as_posix()}:{function.start_position.row+1}:{function.func_def}"
