@@ -21,6 +21,8 @@ RENDER_SCRIPT = os.getenv("CFG_RENDER_SCRIPT")
 SOURCE_ROOT = os.getenv("CLONE_SOURCE_ROOT")
 
 WEIGHT_OFFSET = 30
+MINIMAL_NODE_COUNT = 7
+
 SVG_OUTPUT_WIDTH = 2000
 BSKY_MAX_HEIGHT = 2000
 BSKY_MAX_WIDTH = 2000
@@ -77,6 +79,7 @@ def load_index(index_name: str):
 def choose_function() -> Tuple[Func, Index]:
     index = random.choice(INDICES)
     data = load_index(index.index_name)
+    data = [entry for entry in data if entry['nodeCount'] > MINIMAL_NODE_COUNT]
     # We're adding a bit to the weights to even things out a bit, and make the node count less significant.
     entry = random.choices(
         data, [entry["nodeCount"] + WEIGHT_OFFSET for entry in data]
