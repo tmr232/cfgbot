@@ -47,24 +47,30 @@ class Func:
 
 @attrs.frozen(kw_only=True)
 class Index:
+    project_name: str  #: Project name on GitHub
     name: str  #: Name of the project being indexed
     index_name: str  #: Index filename
     github_url: str  #: URL to the code in GitHub
-    root: str  #: Root path, under SOURCE_ROOT
+    root: str  #: Source root path, under SOURCE_ROOT
+    path_extra: str  #: Extra bit of path to add before filenames when posting
 
 
 INDICES = [
     Index(
+        project_name="python/cpython",
         name="Python/CPython/Lib",
         index_name="cpython_lib.json",
         github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Lib/",
         root="CPython/Lib",
+        path_extra="Lib",
     ),
     Index(
+        project_name="python/cpython",
         name="Python/CPython/Python",
         index_name="cpython_python.json",
         github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Python/",
         root="CPython/Python",
+        path_extra="Python",
     ),
 ]
 
@@ -79,7 +85,7 @@ def load_index(index_name: str):
 def choose_function() -> Tuple[Func, Index]:
     index = random.choice(INDICES)
     data = load_index(index.index_name)
-    data = [entry for entry in data if entry['nodeCount'] > MINIMAL_NODE_COUNT]
+    data = [entry for entry in data if entry["nodeCount"] > MINIMAL_NODE_COUNT]
     # We're adding a bit to the weights to even things out a bit, and make the node count less significant.
     entry = random.choices(
         data, [entry["nodeCount"] + WEIGHT_OFFSET for entry in data]
@@ -139,20 +145,21 @@ def main():
         )
         image_aspect_ratios.append(AspectRatio(height=height, width=width))
 
-    title = f"{index.name}/{function.file.replace("\\", "/")}:{function.start_position.row+1}:{function.func_def}"
-    link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row+1}"
-
     client = Client()
     client.login(IDENTIFIER, PASSWORD)
 
     text = (
         client_utils.TextBuilder()
-        .text(title)
-        .text("\n\n")
-        .link(
-            "jump-to-source",
-            link,
+        .text("Project: ")
+        .link(index.project_name, f"https://github.com/{index.project_name}")
+        .text(
+            "\nFile: ",
         )
+        .link(
+            f"{index.path_extra}/{function.file.replace("\\", "/")}:{function.start_position.row+1}",
+            f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row+1}",
+        )
+        .text(f"\n\n{function.func_def}")
     )
 
     client.send_images(
