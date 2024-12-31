@@ -125,6 +125,10 @@ def get_color_scheme(name: str) -> Path:
     return Path(__file__, "..", "color-schemes", f"{name}.json")
 
 
+def render_url(github_link: str, colors: str) -> str:
+    return f"https://tmr232.github.io/function-graph-overview/render/?github={urllib.parse.quote_plus(github_link)}&colors={colors}"
+
+
 @app.command()
 def main():
     function, index = choose_function()
@@ -148,6 +152,7 @@ def main():
     client = Client()
     client.login(IDENTIFIER, PASSWORD)
 
+    github_code_link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row + 1}"
     text = (
         client_utils.TextBuilder()
         .text("Project: ")
@@ -157,9 +162,19 @@ def main():
         )
         .link(
             f"{index.path_extra}/{function.file.replace("\\", "/")}:{function.start_position.row+1}",
-            f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row+1}",
+            github_code_link,
         )
-        .text(f"\n\n{function.func_def}")
+        .text(f"\n\n{function.func_def}\n\n")
+        .text("SVG: ")
+        .link(
+            "dark",
+            render_url(github_code_link, "dark"),
+        )
+        .text(", ")
+        .link(
+            "light",
+            render_url(github_code_link, "light"),
+        )
     )
 
     client.send_images(
