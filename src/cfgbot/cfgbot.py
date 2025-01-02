@@ -204,6 +204,8 @@ class Post:
 def main():
     function, index = choose_function()
 
+    log.info("Selected function", function=function, index=index)
+
     github_code_link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row + 1}"
 
     post = Post(
@@ -226,16 +228,20 @@ def main():
         SOURCE_ROOT, index.root.replace("\\", "/"), function.file.replace("\\", "/")
     )
 
+    log.info("Rendering graphs")
     images = render_images(function, sourcepath)
+    log.info("Finished rendering")
 
     failed = False
     try:
+        log.info("Posting to Bluesky")
         post_to_bluesky(post, images)
     except Exception:
         failed = True
         log.exception("Failed posting to bluesky", post=post)
 
     try:
+        log.info("Posting to Mastodon")
         post_to_mastodon(post, images)
     except Exception:
         failed = True
@@ -243,6 +249,8 @@ def main():
 
     if failed:
         raise RuntimeError("Failed posting to at least one platform")
+
+    log.info("Posting successful")
 
 
 def render_images(function: Func, sourcepath: Path) -> list[Image]:
