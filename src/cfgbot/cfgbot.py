@@ -12,7 +12,7 @@ import orjson
 import rich
 import structlog
 import typer
-from PIL import Image
+import PIL.Image
 from atproto import Client, client_utils
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
 from mastodon import Mastodon
@@ -125,7 +125,7 @@ def render(func: Func, sourcefile: Path, colors: Path | None = None):
         )
     )
     png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
-    img = Image.open(io.BytesIO(png))
+    img = PIL.Image.open(io.BytesIO(png))
     img.thumbnail((BSKY_MAX_WIDTH, BSKY_MAX_HEIGHT))
     result_data = io.BytesIO()
     img.save(result_data, "PNG")
