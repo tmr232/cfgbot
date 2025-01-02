@@ -197,7 +197,7 @@ class Post:
 
     def into_mastodon(self) -> str:
         svg = "\n".join(f"  {svg.text} {svg.url}" for svg in self.svgs)
-        return f"Project: {self.project.text}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:\n{svg}"
+        return f"Project: {self.project.text} {self.project.url}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:\n{svg}"
 
 
 @app.command()
