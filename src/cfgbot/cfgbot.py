@@ -196,8 +196,8 @@ class Post:
         return Post._format_for_bluesky(abbreviated)
 
     def into_mastodon(self) -> str:
-        svg = [f"\n  {svg.text} {svg.url}" for svg in self.svgs]
-        return f"Project: {self.project.text}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:{svg}"
+        svg = "\n".join(f"  {svg.text} {svg.url}" for svg in self.svgs)
+        return f"Project: {self.project.text}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:\n{svg}"
 
 
 @app.command()
