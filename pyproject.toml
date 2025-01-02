@@ -9,10 +9,12 @@ dependencies = [
     "attrs>=24.3.0",
     "cairosvg>=2.7.1",
     "keyring>=25.6.0",
+    "mastodon-py>=1.8.1",
     "orjson>=3.10.13",
     "pillow>=11.0.0",
     "rich>=13.9.4",
     "ruff>=0.8.4",
+    "structlog>=24.4.0",
     "typer>=0.15.1",
     "urllib3>=2.3.0",
 ]
