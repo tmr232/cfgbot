@@ -1,5 +1,7 @@
+from pathlib import Path
 from typing import Literal, Union, Annotated
 
+import orjson
 import rich
 from pydantic import BaseModel, PositiveInt, Field, StringConstraints
 
@@ -11,10 +13,11 @@ class GhidraFunction(BaseModel):
 
     The JSON file containing the graph should match the `address` field.
     """
+
     #: The address of the function in the binary
     address: HexString
     #: Demangled function name, if exists, including signature info
-    name: str | None
+    name: str | None = None
     #: Number of nodes in the graph
     node_count: PositiveInt
 
@@ -25,6 +28,7 @@ class GhidraIndex(BaseModel):
     Should sit in the same directory as the exported data.
     Describes project metadata, and lists all the functions.
     """
+
     #: Used for discriminated union
     index_type: Literal["ghidra"]
     #: Name of the project the binary is from
@@ -32,14 +36,18 @@ class GhidraIndex(BaseModel):
     #: Name of the binary file
     filename: str
     #: Version of the file or project
-    version: str | None
-    #: The source repo for the binary
-    source_repo: str | None
-    #: Vendor website address
-    vendor_site: str | None
+    version: str | None = None
+    #: Hash of the file
+    sha256: str
     #: Functions in this binary
     functions: list[GhidraFunction]
+    #: Extra info
+    extra: dict[str, str] | None = None
 
+
+class Position(BaseModel):
+    row: PositiveInt
+    column: PositiveInt
 
 class GithubFunction(BaseModel):
     #: The function definition
@@ -48,8 +56,8 @@ class GithubFunction(BaseModel):
     node_count: PositiveInt
     #: Path in the repo to the file containing the function
     filename: str
-    #: Line number where the function is defined
-    line: PositiveInt
+    #: Start position of the function node in tree-sitter
+    start_position: Position
 
 
 class GithubIndex(BaseModel):
@@ -71,3 +79,8 @@ class Index(BaseModel):
 
 
 rich.print(Index.model_json_schema())
+
+
+if __name__ == "__main__":
+    index_data = orjson.loads(Path(r"C:\Code\github.com\tmr232\cfgbot\src\cfgbot\indices\python.json").read_text())
+    Index(**index_data)

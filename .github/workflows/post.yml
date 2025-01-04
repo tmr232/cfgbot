@@ -1,4 +1,4 @@
-name: Post on Bluesky
+name: Post
 on:
   schedule:
     - cron: "33 * * * *"
@@ -18,27 +18,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: "tmr232/function-graph-overview"
-          ref: "bsky-bot"
+          ref: "cfgbot"
           path: "function-graph-overview"
 
       - uses: oven-sh/setup-bun@v2
       - run: |
           cd function-graph-overview
           bun install
-
-      # Clone the code to render
-      - uses: actions/checkout@v4
-        with:
-          repository: "python/cpython"
-          ref: "2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd"
-          path: "projects/CPython"
-          sparse-checkout: |
-            Python
-            Lib
-
-      - run: ls projects/CPython
-      - run: ls /home/runner/work/cfgbot/cfgbot/projects/CPython/Python/ast.c
-      - run: ls /home/runner/work/cfgbot/cfgbot/projects/CPython/Lib/test/test_exception_hierarchy.py
 
       # Render and post
       - run: uv run cfgbot

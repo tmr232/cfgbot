@@ -2,12 +2,14 @@ import io
 import os
 import random
 import subprocess
+import tempfile
 import urllib.parse
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Self
 
 import attrs
 import cairosvg
+import httpx
 import orjson
 import rich
 import structlog
@@ -16,6 +18,9 @@ import PIL.Image
 from atproto import Client, client_utils
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
 from mastodon import Mastodon
+
+from cfgbot import github
+from cfgbot.index import Index, GithubIndex, GhidraIndex, GithubFunction
 
 BLUESKY_IDENTIFIER = os.getenv("BLUESKY_IDENTIFIER")
 BLUESKY_PASSWORD = os.getenv("BLUESKY_PASSWORD")
@@ -34,110 +39,11 @@ BSKY_MAX_HEIGHT = 2000
 BSKY_MAX_WIDTH = 2000
 BSKY_MAX_TEXT_LENGTH = 300
 
-COLOR_SCHEMES = ("dark", "light")
+COLOR_SCHEMES = ["dark", "light"]
 
 log = structlog.get_logger()
 
-
-@attrs.frozen
-class Point:
-    row: int
-    column: int
-
-
-@attrs.frozen
-class Func:
-    file: str
-    start_index: int = attrs.field(alias="startIndex")
-    node_count: int = attrs.field(alias="nodeCount")
-    func_def: str = attrs.field(alias="funcDef")
-    start_position: Point = attrs.field(
-        alias="startPosition", converter=lambda x: Point(**x)
-    )
-
-
-@attrs.frozen(kw_only=True)
-class Index:
-    project_name: str  #: Project name on GitHub
-    name: str  #: Name of the project being indexed
-    index_name: str  #: Index filename
-    github_url: str  #: URL to the code in GitHub
-    root: str  #: Source root path, under SOURCE_ROOT
-    path_extra: str  #: Extra bit of path to add before filenames when posting
-
-
-INDICES = [
-    Index(
-        project_name="python/cpython",
-        name="Python/CPython/Lib",
-        index_name="cpython_lib.json",
-        github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Lib/",
-        root="CPython/Lib",
-        path_extra="Lib",
-    ),
-    Index(
-        project_name="python/cpython",
-        name="Python/CPython/Python",
-        index_name="cpython_python.json",
-        github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Python/",
-        root="CPython/Python",
-        path_extra="Python",
-    ),
-]
-
 app = typer.Typer()
-
-
-def load_index(index_name: str):
-    text = (Path(__file__).parent / "indices" / index_name).read_text()
-    return orjson.loads(text)
-
-
-def choose_function() -> Tuple[Func, Index]:
-    index = random.choice(INDICES)
-    data = load_index(index.index_name)
-    data = [entry for entry in data if entry["nodeCount"] > MINIMAL_NODE_COUNT]
-    # We're adding a bit to the weights to even things out a bit, and make the node count less significant.
-    entry = random.choices(
-        data, [entry["nodeCount"] + WEIGHT_OFFSET for entry in data]
-    )[0]
-    return Func(**entry), index
-
-
-def render(func: Func, sourcefile: Path, colors: Path | None = None):
-    rich.print(sourcefile.absolute())
-    if not sourcefile.exists():
-        raise RuntimeError(f"Missing source file! {sourcefile.absolute()}")
-    svg = subprocess.check_output(
-        list(
-            filter(
-                None,
-                [
-                    "bun",
-                    "run",
-                    RENDER_SCRIPT,
-                    str(sourcefile.absolute()),
-                    orjson.dumps(attrs.asdict(func.start_position)),
-                    "--colors" if colors else None,
-                    str(os.path.normpath(colors.absolute())) if colors else None,
-                ],
-            )
-        )
-    )
-    png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
-    img = PIL.Image.open(io.BytesIO(png))
-    img.thumbnail((BSKY_MAX_WIDTH, BSKY_MAX_HEIGHT))
-    result_data = io.BytesIO()
-    img.save(result_data, "PNG")
-    return result_data.getvalue(), (img.width, img.height)
-
-
-def get_color_scheme(name: str) -> Path:
-    return Path(__file__, "..", "color-schemes", f"{name}.json")
-
-
-def render_url(github_link: str, colors: str) -> str:
-    return f"https://tmr232.github.io/function-graph-overview/render/?github={urllib.parse.quote_plus(github_link)}&colors={colors}"
 
 
 @attrs.frozen(kw_only=True)
@@ -147,6 +53,14 @@ class Image:
     height: int
     alt: str
 
+    @classmethod
+    def from_svg(cls, *, svg:bytes, alt:str)->Self:
+        png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
+        img = PIL.Image.open(io.BytesIO(png))
+        img.thumbnail((BSKY_MAX_WIDTH, BSKY_MAX_HEIGHT))
+        result_data = io.BytesIO()
+        img.save(result_data, "PNG")
+        return cls(image_bytes=result_data.getvalue(), height=img.height, width=img.width, alt=alt)
 
 @attrs.frozen(kw_only=True)
 class Link:
@@ -200,37 +114,89 @@ class Post:
         return f"Project: {self.project.text} {self.project.url}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:\n{svg}"
 
 
-@app.command()
-def main():
-    function, index = choose_function()
 
-    log.info("Selected function", function=function, index=index)
+def choose_function_from(indices:list[Index]):
+    index = random.choices(indices)
+    match index.content:
+        case GithubIndex(functions=functions):
+            interesting_functions = [function for function in functions if function.node_count >= MINIMAL_NODE_COUNT]
+            return index.content, random.choice(interesting_functions)
+        case GhidraIndex(functions=functions):
+            raise NotImplementedError()
 
-    github_code_link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row + 1}"
+def render_svg(sourcefile:Path, colors:str, function:GithubFunction):
+    return subprocess.check_output(
+        list(
+            filter(
+                None,
+                [
+                    "bun",
+                    "run",
+                    RENDER_SCRIPT,
+                    str(sourcefile.absolute()),
+                    function.start_position.model_dump_json(),
+                    "--colors" if colors else None,
+                    colors if colors else None,
+                ],
+            )
+        )
+    )
 
-    post = Post(
+
+def generate_post(index_paths:list[Path], colors_schemes:list[str])->tuple[Post, list[Image]]:
+    index_path:Path = random.choice(index_paths)
+    index = Index(**orjson.loads(index_path.read_text())).content
+
+    if isinstance(index, GithubIndex):
+        interesting_functions = [function for function in index.functions if function.node_count >= MINIMAL_NODE_COUNT]
+        function = random.choice(interesting_functions)
+
+        response = httpx.get(github.get_raw_url(project=index.project, ref=index.ref, filename=function.filename))
+        code = response.text
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            codefile = Path(tempdir, code)
+            codefile.write_text(code)
+
+            images = []
+            for colors in colors_schemes:
+                svg = render_svg(codefile, colors, function)
+                image = Image.from_svg(svg=svg, alt=f"A control-flow-graph of the function described in the post text using a {colors} color scheme.")
+                images.append(image)
+
+        line = function.start_position.row + 1
+        code_url = github.get_code_url(index.project, index.ref, filename=function.filename, line=line)
+        post = Post(
         project=Link(
-            text=index.project_name, url=f"https://github.com/{index.project_name}"
+            text=index.project, url=github.get_project_url(index.project)
         ),
         code=Link(
-            text=f"{index.path_extra}/{function.file.replace("\\", "/")}:{function.start_position.row+1}",
-            url=github_code_link,
+            text=f"{function.filename}:{line}",
+            url=code_url,
         ),
-        funcdef=function.func_def,
+        funcdef=function.funcdef,
         svgs=[
-            Link(text=colors, url=render_url(github_code_link, colors))
-            for colors in COLOR_SCHEMES
+            Link(text=colors, url=render_url(code_url, colors))
+            for colors in colors_schemes
         ],
-    )
+        )
+        return post, images
+    else:
+        raise NotImplementedError()
 
-    rich.print(function)
-    sourcepath = Path(
-        SOURCE_ROOT, index.root.replace("\\", "/"), function.file.replace("\\", "/")
-    )
 
-    log.info("Rendering graphs")
-    images = render_images(function, sourcepath)
-    log.info("Finished rendering")
+
+def render_url(github_link: str, colors: str) -> str:
+    return f"https://tmr232.github.io/function-graph-overview/render/?github={urllib.parse.quote_plus(github_link)}&colors={colors}"
+
+
+def find_github_indices()->list[Path]:
+    return list(Path(__file__, "..", "indices").glob("*.json"))
+
+@app.command()
+def main():
+    index_paths= find_github_indices()
+    post, images = generate_post(index_paths, colors_schemes=COLOR_SCHEMES)
 
     failed = False
     try:
@@ -251,18 +217,6 @@ def main():
         raise RuntimeError("Failed posting to at least one platform")
 
     log.info("Posting successful")
-
-
-def render_images(function: Func, sourcepath: Path) -> list[Image]:
-    def _impl():
-        for colors in COLOR_SCHEMES:
-            image_bytes, (width, height) = render(
-                function, sourcepath, get_color_scheme(colors)
-            )
-            alt = f"A control-flow-graph of the function described in the post text using a {colors} color scheme."
-            yield Image(image_bytes=image_bytes, width=width, height=height, alt=alt)
-
-    return list(_impl())
 
 
 def post_to_bluesky(post: Post, images: list[Image]):
