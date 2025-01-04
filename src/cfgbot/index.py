@@ -46,8 +46,9 @@ class GhidraIndex(BaseModel):
 
 
 class Position(BaseModel):
-    row: PositiveInt
-    column: PositiveInt
+    row: int
+    column: int
+
 
 class GithubFunction(BaseModel):
     #: The function definition
@@ -82,5 +83,9 @@ rich.print(Index.model_json_schema())
 
 
 if __name__ == "__main__":
-    index_data = orjson.loads(Path(r"C:\Code\github.com\tmr232\cfgbot\src\cfgbot\indices\python.json").read_text())
+    index_data = orjson.loads(
+        Path(
+            r"C:\Code\github.com\tmr232\cfgbot\src\cfgbot\indices\python.json"
+        ).read_text()
+    )
     Index(**index_data)

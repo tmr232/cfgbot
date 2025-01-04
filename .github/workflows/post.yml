@@ -30,8 +30,7 @@ jobs:
       - run: uv run cfgbot
         timeout-minutes: 5
         env:
-          CFG_RENDER_SCRIPT: "function-graph-overview/scripts/render-function.ts"
-          CLONE_SOURCE_ROOT: "projects"
+          FUNCTION_RENDER_SCRIPT: "function-graph-overview/scripts/render-function.ts"
           BLUESKY_IDENTIFIER: ${{ secrets.BLUESKY_IDENTIFIER }}
           BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
