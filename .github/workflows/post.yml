@@ -21,6 +21,13 @@ jobs:
           ref: "cfgbot"
           path: "function-graph-overview"
 
+      # Fetch the Ghidra export indices
+      - uses: actions/checkout@v4
+        with:
+          repository: "v-p-b/ghidra-function-graph-datasets"
+          ref: "main"
+          path: "ghidra-indices"
+
       - uses: oven-sh/setup-bun@v2
       - run: |
           cd function-graph-overview
@@ -31,7 +38,10 @@ jobs:
         timeout-minutes: 5
         env:
           FUNCTION_RENDER_SCRIPT: "function-graph-overview/scripts/render-function.ts"
+          GRAPH_RENDER_SCRIPT: "function-graph-overview/scripts/graph-function.ts"
           BLUESKY_IDENTIFIER: ${{ secrets.BLUESKY_IDENTIFIER }}
           BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
           MASTODON_API_BASE_URL: ${{ secrets.MASTODON_API_BASE_URL }}
+          GHIDRA_EXPORT_ROOT: "ghidra-indices"
+          GHIDRA_RAW_URL_BASE: "https://raw.githubusercontent.com/v-p-b/ghidra-function-graph-datasets/refs/heads/main/"

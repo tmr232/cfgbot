@@ -19,7 +19,7 @@ class GhidraFunction(BaseModel):
     #: Demangled function name, if exists, including signature info
     name: str | None = None
     #: Number of nodes in the graph
-    node_count: PositiveInt
+    node_count: int
 
 
 class GhidraIndex(BaseModel):
