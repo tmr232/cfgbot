@@ -102,10 +102,10 @@ class GhidraPost:
             .text(f"Address: {post.address}")
             .text("\n")
             .text("\n")
-            .text("SVG: ")
         )
         if post.funcdef:
             text = text.text(f"{post.funcdef}").text("\n").text("\n")
+        text = text.text("SVG: ")
         for i, svg_link in enumerate(post.svgs):
             if i > 0:
                 text = text.text(", ")
@@ -242,6 +242,7 @@ def generate_post(
     index_paths: list[Path | IndexLocator], colors_schemes: list[str]
 ) -> tuple[Post, list[Image]]:
     index_path: Path | IndexLocator = random.choice(index_paths)
+    log.info("Index selected", index=index_path)
     match index_path:
         case Path():
             index = Index(**orjson.loads(index_path.read_text())).content
@@ -362,7 +363,9 @@ def find_github_indices() -> list[Path | IndexLocator]:
 
 @app.command()
 def main():
+    log.info("Loading indices")
     index_paths = find_github_indices()
+    log.info("Generating post")
     post, images = generate_post(index_paths, colors_schemes=COLOR_SCHEMES)
     rich.print(post)
     failed = False
