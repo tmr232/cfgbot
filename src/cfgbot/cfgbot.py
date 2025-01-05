@@ -386,7 +386,7 @@ def main():
     log.info("Posting successful")
 
 
-def post_to_bluesky(post: GithubPost, images: list[Image]):
+def post_to_bluesky(post: Post, images: list[Image]):
     client = Client()
     client.login(BLUESKY_IDENTIFIER, BLUESKY_PASSWORD)
 
@@ -400,7 +400,7 @@ def post_to_bluesky(post: GithubPost, images: list[Image]):
     )
 
 
-def post_to_mastodon(post: GithubPost, images: list[Image]):
+def post_to_mastodon(post: Post, images: list[Image]):
     mastodon = Mastodon(
         access_token=MASTODON_ACCESS_TOKEN, api_base_url=MASTODON_API_BASE_URL
     )
