@@ -365,6 +365,7 @@ def find_github_indices() -> list[Path | IndexLocator]:
 def main():
     log.info("Loading indices")
     index_paths = find_github_indices()
+    log.info("Indices found", indices=index_paths)
     log.info("Generating post")
     post, images = generate_post(index_paths, colors_schemes=COLOR_SCHEMES)
     rich.print(post)
