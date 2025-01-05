@@ -2,12 +2,14 @@ import io
 import os
 import random
 import subprocess
+import tempfile
 import urllib.parse
 from pathlib import Path
-from typing import Tuple
+from typing import Self, Protocol
 
 import attrs
 import cairosvg
+import httpx
 import orjson
 import rich
 import structlog
@@ -17,13 +19,19 @@ from atproto import Client, client_utils
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
 from mastodon import Mastodon
 
+from cfgbot import github
+from cfgbot.index import Index, GithubIndex, GhidraIndex, GithubFunction, GhidraFunction
+
 BLUESKY_IDENTIFIER = os.getenv("BLUESKY_IDENTIFIER")
 BLUESKY_PASSWORD = os.getenv("BLUESKY_PASSWORD")
 MASTODON_ACCESS_TOKEN = os.getenv("MASTODON_ACCESS_TOKEN")
 MASTODON_API_BASE_URL = os.getenv("MASTODON_API_BASE_URL")
 
-RENDER_SCRIPT = os.getenv("CFG_RENDER_SCRIPT")
-SOURCE_ROOT = os.getenv("CLONE_SOURCE_ROOT")
+FUNCTION_RENDER_SCRIPT = os.getenv("FUNCTION_RENDER_SCRIPT")
+GRAPH_RENDER_SCRIPT = os.getenv("GRAPH_RENDER_SCRIPT")
+
+GHIDRA_EXPORT_ROOT = os.getenv("GHIDRA_EXPORT_ROOT")
+GHIDRA_RAW_URL_BASE = os.getenv("GHIDRA_RAW_URL_BASE")
 
 WEIGHT_OFFSET = 30
 MINIMAL_NODE_COUNT = 7
@@ -34,110 +42,11 @@ BSKY_MAX_HEIGHT = 2000
 BSKY_MAX_WIDTH = 2000
 BSKY_MAX_TEXT_LENGTH = 300
 
-COLOR_SCHEMES = ("dark", "light")
+COLOR_SCHEMES = ["dark", "light"]
 
 log = structlog.get_logger()
 
-
-@attrs.frozen
-class Point:
-    row: int
-    column: int
-
-
-@attrs.frozen
-class Func:
-    file: str
-    start_index: int = attrs.field(alias="startIndex")
-    node_count: int = attrs.field(alias="nodeCount")
-    func_def: str = attrs.field(alias="funcDef")
-    start_position: Point = attrs.field(
-        alias="startPosition", converter=lambda x: Point(**x)
-    )
-
-
-@attrs.frozen(kw_only=True)
-class Index:
-    project_name: str  #: Project name on GitHub
-    name: str  #: Name of the project being indexed
-    index_name: str  #: Index filename
-    github_url: str  #: URL to the code in GitHub
-    root: str  #: Source root path, under SOURCE_ROOT
-    path_extra: str  #: Extra bit of path to add before filenames when posting
-
-
-INDICES = [
-    Index(
-        project_name="python/cpython",
-        name="Python/CPython/Lib",
-        index_name="cpython_lib.json",
-        github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Lib/",
-        root="CPython/Lib",
-        path_extra="Lib",
-    ),
-    Index(
-        project_name="python/cpython",
-        name="Python/CPython/Python",
-        index_name="cpython_python.json",
-        github_url="https://github.com/python/cpython/blob/2bd5a7ab0f4a1f65ab8043001bd6e8416c5079bd/Python/",
-        root="CPython/Python",
-        path_extra="Python",
-    ),
-]
-
 app = typer.Typer()
-
-
-def load_index(index_name: str):
-    text = (Path(__file__).parent / "indices" / index_name).read_text()
-    return orjson.loads(text)
-
-
-def choose_function() -> Tuple[Func, Index]:
-    index = random.choice(INDICES)
-    data = load_index(index.index_name)
-    data = [entry for entry in data if entry["nodeCount"] > MINIMAL_NODE_COUNT]
-    # We're adding a bit to the weights to even things out a bit, and make the node count less significant.
-    entry = random.choices(
-        data, [entry["nodeCount"] + WEIGHT_OFFSET for entry in data]
-    )[0]
-    return Func(**entry), index
-
-
-def render(func: Func, sourcefile: Path, colors: Path | None = None):
-    rich.print(sourcefile.absolute())
-    if not sourcefile.exists():
-        raise RuntimeError(f"Missing source file! {sourcefile.absolute()}")
-    svg = subprocess.check_output(
-        list(
-            filter(
-                None,
-                [
-                    "bun",
-                    "run",
-                    RENDER_SCRIPT,
-                    str(sourcefile.absolute()),
-                    orjson.dumps(attrs.asdict(func.start_position)),
-                    "--colors" if colors else None,
-                    str(os.path.normpath(colors.absolute())) if colors else None,
-                ],
-            )
-        )
-    )
-    png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
-    img = PIL.Image.open(io.BytesIO(png))
-    img.thumbnail((BSKY_MAX_WIDTH, BSKY_MAX_HEIGHT))
-    result_data = io.BytesIO()
-    img.save(result_data, "PNG")
-    return result_data.getvalue(), (img.width, img.height)
-
-
-def get_color_scheme(name: str) -> Path:
-    return Path(__file__, "..", "color-schemes", f"{name}.json")
-
-
-def render_url(github_link: str, colors: str) -> str:
-    return f"https://tmr232.github.io/function-graph-overview/render/?github={urllib.parse.quote_plus(github_link)}&colors={colors}"
 
 
 @attrs.frozen(kw_only=True)
@@ -147,6 +56,20 @@ class Image:
     height: int
     alt: str
 
+    @classmethod
+    def from_svg(cls, *, svg: bytes, alt: str) -> Self:
+        png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
+        img = PIL.Image.open(io.BytesIO(png))
+        img.thumbnail((BSKY_MAX_WIDTH, BSKY_MAX_HEIGHT))
+        result_data = io.BytesIO()
+        img.save(result_data, "PNG")
+        return cls(
+            image_bytes=result_data.getvalue(),
+            height=img.height,
+            width=img.width,
+            alt=alt,
+        )
+
 
 @attrs.frozen(kw_only=True)
 class Link:
@@ -154,8 +77,63 @@ class Link:
     url: str
 
 
+class Post(Protocol):
+    def into_bsky(self) -> client_utils.TextBuilder: ...
+    def into_mastodon(self) -> str: ...
+
+
 @attrs.frozen(kw_only=True)
-class Post:
+class GhidraPost:
+    project: str
+    version: str
+    filename: str
+    address: str
+    funcdef: str | None
+    svgs: list[Link]
+
+    @staticmethod
+    def _format_for_bluesky(post) -> client_utils.TextBuilder:
+        text = (
+            client_utils.TextBuilder()
+            .text(f"Project: {post.project} {post.version}")
+            .text("\n")
+            .text(f"File: {post.filename}")
+            .text("\n")
+            .text(f"Address: {post.address}")
+            .text("\n")
+            .text("\n")
+            .text("SVG: ")
+        )
+        if post.funcdef:
+            text = text.text(f"{post.funcdef}").text("\n").text("\n")
+        for i, svg_link in enumerate(post.svgs):
+            if i > 0:
+                text = text.text(", ")
+            text = text.link(svg_link.text, svg_link.url)
+        return text
+
+    def into_bsky(self) -> client_utils.TextBuilder:
+        builder = self._format_for_bluesky(self)
+        post_text = builder.build_text()
+        if len(post_text) <= BSKY_MAX_TEXT_LENGTH:
+            return builder
+
+        # If the post is too long, we shorten the funcdef part by as much as necessary to fit.
+        to_remove = len(post_text) - BSKY_MAX_TEXT_LENGTH
+        if self.funcdef is None or to_remove > len(self.funcdef):
+            raise ValueError("Post too long regardless of funcdef length")
+
+        funcdef = f"{self.funcdef[:-to_remove-3]}..."
+        abbreviated = attrs.evolve(self, funcdef=funcdef)
+        return self._format_for_bluesky(abbreviated)
+
+    def into_mastodon(self) -> str:
+        svg = "\n".join(f"  {svg.text} {svg.url}" for svg in self.svgs)
+        return f"Project: {self.project} {self.version}\nFile: {self.filename}\nAddress: {self.address}\n\n{self.funcdef}\n\nSVG:\n{svg}"
+
+
+@attrs.frozen(kw_only=True)
+class GithubPost:
     project: Link
     code: Link
     funcdef: str
@@ -181,7 +159,7 @@ class Post:
         return text
 
     def into_bsky(self) -> client_utils.TextBuilder:
-        builder = Post._format_for_bluesky(self)
+        builder = self._format_for_bluesky(self)
         post_text = builder.build_text()
         if len(post_text) <= BSKY_MAX_TEXT_LENGTH:
             return builder
@@ -193,45 +171,200 @@ class Post:
 
         funcdef = f"{self.funcdef[:-to_remove-3]}..."
         abbreviated = attrs.evolve(self, funcdef=funcdef)
-        return Post._format_for_bluesky(abbreviated)
+        return self._format_for_bluesky(abbreviated)
 
     def into_mastodon(self) -> str:
         svg = "\n".join(f"  {svg.text} {svg.url}" for svg in self.svgs)
         return f"Project: {self.project.text} {self.project.url}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:\n{svg}"
 
 
-@app.command()
-def main():
-    function, index = choose_function()
+def choose_function_from(indices: list[Index]):
+    index = random.choices(indices)
+    match index.content:
+        case GithubIndex(functions=functions):
+            interesting_functions = [
+                function
+                for function in functions
+                if function.node_count >= MINIMAL_NODE_COUNT
+            ]
+            return index.content, random.choice(interesting_functions)
+        case GhidraIndex(functions=functions):
+            raise NotImplementedError()
 
-    log.info("Selected function", function=function, index=index)
 
-    github_code_link = f"{urllib.parse.urljoin(index.github_url, function.file)}#L{function.start_position.row + 1}"
+def render_function_svg(
+    sourcefile: Path, colors: str, function: GithubFunction
+) -> bytes:
+    return subprocess.check_output(
+        list(
+            filter(
+                None,
+                [
+                    "bun",
+                    "run",
+                    FUNCTION_RENDER_SCRIPT,
+                    "--colors" if colors else None,
+                    colors if colors else None,
+                    str(sourcefile.absolute()),
+                    function.start_position.model_dump_json(),
+                ],
+            )
+        )
+    )
 
-    post = Post(
-        project=Link(
-            text=index.project_name, url=f"https://github.com/{index.project_name}"
-        ),
-        code=Link(
-            text=f"{index.path_extra}/{function.file.replace("\\", "/")}:{function.start_position.row+1}",
-            url=github_code_link,
-        ),
-        funcdef=function.func_def,
+
+def render_graph_svg(graph_file: Path, colors: str) -> bytes:
+    return subprocess.check_output(
+        list(
+            filter(
+                None,
+                [
+                    "bun",
+                    "run",
+                    GRAPH_RENDER_SCRIPT,
+                    "--colors" if colors else None,
+                    colors if colors else None,
+                    str(graph_file.absolute()),
+                ],
+            )
+        )
+    )
+
+
+@attrs.frozen(kw_only=True)
+class IndexLocator:
+    path: Path
+    repo_base: Path
+    raw_url_base: str
+
+
+def generate_post(
+    index_paths: list[Path | IndexLocator], colors_schemes: list[str]
+) -> tuple[Post, list[Image]]:
+    index_path: Path | IndexLocator = random.choice(index_paths)
+    match index_path:
+        case Path():
+            index = Index(**orjson.loads(index_path.read_text())).content
+        case IndexLocator():
+            index = Index(**orjson.loads(index_path.path.read_text())).content
+        case _:
+            raise TypeError(f"expected Path or IndexLocator, found {type(index_path)}")
+
+    if isinstance(index, GithubIndex):
+        return generate_github_post(index, colors_schemes)
+    else:
+        return generate_ghidra_post(index_path, index, colors_schemes)
+
+
+def generate_ghidra_post(
+    index_locator: IndexLocator, index: GhidraIndex, colors_schemes: list[str]
+) -> tuple[GhidraPost, list[Image]]:
+    interesting_functions = [
+        function
+        for function in index.functions
+        if function.node_count >= MINIMAL_NODE_COUNT
+    ]
+    function: GhidraFunction = random.choice(interesting_functions)
+    index_dir = index_locator.path.parent
+    graph_path = index_dir / f"{function.address}.json"
+    images = []
+    for colors in colors_schemes:
+        svg = render_graph_svg(graph_path, colors)
+        image = Image.from_svg(
+            svg=svg,
+            alt=f"A control-flow-graph of the function described in the post text using a {colors} color scheme.",
+        )
+        images.append(image)
+
+    graph_url = f"{index_locator.raw_url_base}/{graph_path.relative_to(index_locator.repo_base)!s}".replace(
+        "\\", "/"
+    )
+    return GhidraPost(
+        project=index.project,
+        version=index.version,
+        filename=index.filename,
+        address=function.address,
+        funcdef=function.name,
         svgs=[
-            Link(text=colors, url=render_url(github_code_link, colors))
-            for colors in COLOR_SCHEMES
+            Link(text=colors, url=render_graph_url(graph_url, colors))
+            for colors in colors_schemes
+        ],
+    ), images
+
+
+def generate_github_post(
+    index: GithubIndex, colors_schemes: list[str]
+) -> tuple[GithubPost, list[Image]]:
+    interesting_functions = [
+        function
+        for function in index.functions
+        if function.node_count >= MINIMAL_NODE_COUNT
+    ]
+    function: GithubFunction = random.choice(interesting_functions)
+    response = httpx.get(
+        github.get_raw_url(
+            project=index.project, ref=index.ref, filename=function.filename
+        )
+    )
+    code = response.text
+    with tempfile.TemporaryDirectory() as tempdir:
+        codefile = Path(tempdir, Path(function.filename).name)
+        codefile.write_text(code)
+
+        images = []
+        for colors in colors_schemes:
+            svg = render_function_svg(codefile, colors, function)
+            image = Image.from_svg(
+                svg=svg,
+                alt=f"A control-flow-graph of the function described in the post text using a {colors} color scheme.",
+            )
+            images.append(image)
+    line = function.start_position.row + 1
+    code_url = github.get_code_url(
+        index.project, index.ref, filename=function.filename, line=line
+    )
+    post = GithubPost(
+        project=Link(text=index.project, url=github.get_project_url(index.project)),
+        code=Link(
+            text=f"{function.filename}:{line}",
+            url=code_url,
+        ),
+        funcdef=function.funcdef,
+        svgs=[
+            Link(text=colors, url=render_github_url(code_url, colors))
+            for colors in colors_schemes
         ],
     )
+    return post, images
 
-    rich.print(function)
-    sourcepath = Path(
-        SOURCE_ROOT, index.root.replace("\\", "/"), function.file.replace("\\", "/")
-    )
 
-    log.info("Rendering graphs")
-    images = render_images(function, sourcepath)
-    log.info("Finished rendering")
+def render_github_url(github_link: str, colors: str) -> str:
+    return f"https://tmr232.github.io/function-graph-overview/render/?github={urllib.parse.quote_plus(github_link)}&colors={colors}"
 
+
+def render_graph_url(ghidra_link: str, colors: str) -> str:
+    return f"https://tmr232.github.io/function-graph-overview/render/?graph={urllib.parse.quote_plus(ghidra_link)}&colors={colors}"
+
+
+def find_github_indices() -> list[Path | IndexLocator]:
+    ghidra_index_locators = []
+    for index_path in Path(GHIDRA_EXPORT_ROOT).rglob("**/index.json"):
+        ghidra_index_locators.append(
+            IndexLocator(
+                path=index_path,
+                repo_base=Path(GHIDRA_EXPORT_ROOT),
+                raw_url_base=GHIDRA_RAW_URL_BASE,
+            )
+        )
+    github_code_indices = list(Path(__file__, "..", "indices").glob("*.json"))
+    return ghidra_index_locators + github_code_indices
+
+
+@app.command()
+def main():
+    index_paths = find_github_indices()
+    post, images = generate_post(index_paths, colors_schemes=COLOR_SCHEMES)
+    rich.print(post)
     failed = False
     try:
         log.info("Posting to Bluesky")
@@ -253,19 +386,7 @@ def main():
     log.info("Posting successful")
 
 
-def render_images(function: Func, sourcepath: Path) -> list[Image]:
-    def _impl():
-        for colors in COLOR_SCHEMES:
-            image_bytes, (width, height) = render(
-                function, sourcepath, get_color_scheme(colors)
-            )
-            alt = f"A control-flow-graph of the function described in the post text using a {colors} color scheme."
-            yield Image(image_bytes=image_bytes, width=width, height=height, alt=alt)
-
-    return list(_impl())
-
-
-def post_to_bluesky(post: Post, images: list[Image]):
+def post_to_bluesky(post: GithubPost, images: list[Image]):
     client = Client()
     client.login(BLUESKY_IDENTIFIER, BLUESKY_PASSWORD)
 
@@ -279,7 +400,7 @@ def post_to_bluesky(post: Post, images: list[Image]):
     )
 
 
-def post_to_mastodon(post: Post, images: list[Image]):
+def post_to_mastodon(post: GithubPost, images: list[Image]):
     mastodon = Mastodon(
         access_token=MASTODON_ACCESS_TOKEN, api_base_url=MASTODON_API_BASE_URL
     )
