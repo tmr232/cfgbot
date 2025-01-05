@@ -348,7 +348,7 @@ def render_graph_url(ghidra_link: str, colors: str) -> str:
 
 def find_github_indices() -> list[Path | IndexLocator]:
     ghidra_index_locators = []
-    for index_path in Path(GHIDRA_EXPORT_ROOT).rglob("**/_ghidra_export_metadata.json"):
+    for index_path in Path(GHIDRA_EXPORT_ROOT).rglob("**/index.json"):
         ghidra_index_locators.append(
             IndexLocator(
                 path=index_path,
