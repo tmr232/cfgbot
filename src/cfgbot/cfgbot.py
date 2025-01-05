@@ -357,7 +357,7 @@ def find_github_indices() -> list[Path | IndexLocator]:
                 raw_url_base=GHIDRA_RAW_URL_BASE,
             )
         )
-    github_code_indices = list(Path(__file__, "..", "indices").glob("*.json"))
+    github_code_indices = list((Path(__file__).parent / "indices").glob("*.json"))
     log.info("looking for GH indices", file=__file__, gh_indices = github_code_indices, ls=os.listdir(os.path.join(os.path.dirname(__file__),"indices")))
     return ghidra_index_locators + github_code_indices
 
