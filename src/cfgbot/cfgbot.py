@@ -60,8 +60,7 @@ def _parse_svg_length(value: str) -> int:
 
 
 def get_svg_size(svg: bytes):
-    tree = ElementTree.parse(svg)
-    root = tree.getroot()
+    root = ElementTree.XML(svg)
     return Size(
         height=_parse_svg_length(root.attrib["height"]),
         width=_parse_svg_length(root.attrib["width"]),
