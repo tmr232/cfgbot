@@ -79,7 +79,6 @@ class Index(BaseModel):
     content: Union[GhidraIndex, GithubIndex] = Field(discriminator="index_type")
 
 
-
 if __name__ == "__main__":
     index_data = orjson.loads(
         Path(

@@ -1,4 +1,3 @@
-import io
 import os
 import random
 import subprocess
@@ -6,6 +5,7 @@ import tempfile
 import urllib.parse
 from pathlib import Path
 from typing import Self, Protocol
+from xml.etree import ElementTree
 
 import attrs
 import cairosvg
@@ -14,8 +14,8 @@ import orjson
 import rich
 import structlog
 import typer
-import PIL.Image
 from atproto import Client, client_utils
+from atproto_client.exceptions import InvokeTimeoutError
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
 from mastodon import Mastodon
 
@@ -50,6 +50,25 @@ app = typer.Typer()
 
 
 @attrs.frozen(kw_only=True)
+class Size:
+    width: int
+    height: int
+
+
+def _parse_svg_length(value: str) -> int:
+    return int(value.rstrip("pt"))
+
+
+def get_svg_size(svg: bytes):
+    tree = ElementTree.parse(svg)
+    root = tree.getroot()
+    return Size(
+        height=_parse_svg_length(root.attrib["height"]),
+        width=_parse_svg_length(root.attrib["width"]),
+    )
+
+
+@attrs.frozen(kw_only=True)
 class Image:
     image_bytes: bytes
     width: int
@@ -58,15 +77,15 @@ class Image:
 
     @classmethod
     def from_svg(cls, *, svg: bytes, alt: str) -> Self:
-        png = cairosvg.svg2png(svg, output_width=SVG_OUTPUT_WIDTH)
-        img = PIL.Image.open(io.BytesIO(png))
-        img.thumbnail((BSKY_MAX_WIDTH, BSKY_MAX_HEIGHT))
-        result_data = io.BytesIO()
-        img.save(result_data, "PNG")
+        svg_size = get_svg_size(svg)
+        if svg_size.height > svg_size.width:
+            png = cairosvg.svg2png(svg, output_height=BSKY_MAX_HEIGHT)
+        else:
+            png = cairosvg.svg2png(svg, output_width=BSKY_MAX_WIDTH)
         return cls(
-            image_bytes=result_data.getvalue(),
-            height=img.height,
-            width=img.width,
+            image_bytes=png,
+            height=svg_size.height,
+            width=svg_size.width,
             alt=alt,
         )
 
@@ -373,6 +392,10 @@ def main():
     try:
         log.info("Posting to Bluesky")
         post_to_bluesky(post, images)
+    except InvokeTimeoutError:
+        log.warning(
+            "Posting to bluesky timed out on the response, but probably posted regardless."
+        )
     except Exception:
         failed = True
         log.exception("Failed posting to bluesky", post=post)
