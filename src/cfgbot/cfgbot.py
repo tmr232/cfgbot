@@ -407,10 +407,14 @@ def main():
 
     log.info("Posting successful")
 
+from atproto_client.request import Request
+class MyRequest(Request):
+    def __init__(self):
+        super().__init__()
+        self._client = httpx.Client(timeout=10.0, follow_redirects=True)
 
 def post_to_bluesky(post: Post, images: list[Image]):
-    custom_client = httpx.Client(timeout=10.0)
-    client = Client(client=custom_client)
+    client = Client(request=MyRequest())
     client.login(BLUESKY_IDENTIFIER, BLUESKY_PASSWORD)
 
     client.send_images(
