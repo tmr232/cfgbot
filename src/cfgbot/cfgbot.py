@@ -391,10 +391,6 @@ def main():
     try:
         log.info("Posting to Bluesky")
         post_to_bluesky(post, images)
-    except InvokeTimeoutError:
-        log.warning(
-            "Posting to bluesky timed out on the response, but probably posted regardless."
-        )
     except Exception:
         failed = True
         log.exception("Failed posting to bluesky", post=post)
@@ -413,7 +409,7 @@ def main():
 
 
 def post_to_bluesky(post: Post, images: list[Image]):
-    client = Client()
+    client = Client(timeout=10.0)
     client.login(BLUESKY_IDENTIFIER, BLUESKY_PASSWORD)
 
     client.send_images(
