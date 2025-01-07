@@ -409,7 +409,8 @@ def main():
 
 
 def post_to_bluesky(post: Post, images: list[Image]):
-    client = Client(timeout=10.0)
+    custom_client = httpx.Client(timeout=10.0)
+    client = Client(client=custom_client)
     client.login(BLUESKY_IDENTIFIER, BLUESKY_PASSWORD)
 
     client.send_images(
