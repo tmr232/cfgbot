@@ -12,6 +12,7 @@ import cairosvg
 import httpx
 import orjson
 import rich
+import stamina
 import structlog
 import typer
 from atproto import Client, client_utils
@@ -311,6 +312,15 @@ def generate_ghidra_post(
     ), images
 
 
+@stamina.retry(on=httpx.ReadTimeout)
+def fetch_github_function(function: GithubFunction, index: GithubIndex):
+    return httpx.get(
+        github.get_raw_url(
+            project=index.project, ref=index.ref, filename=function.filename
+        )
+    ).text
+
+
 def generate_github_post(
     index: GithubIndex, colors_schemes: list[str]
 ) -> tuple[GithubPost, list[Image]]:
@@ -320,12 +330,7 @@ def generate_github_post(
         if function.node_count >= MINIMAL_NODE_COUNT
     ]
     function: GithubFunction = random.choice(interesting_functions)
-    response = httpx.get(
-        github.get_raw_url(
-            project=index.project, ref=index.ref, filename=function.filename
-        )
-    )
-    code = response.text
+    code = fetch_github_function(function, index)
     with tempfile.TemporaryDirectory() as tempdir:
         codefile = Path(tempdir, Path(function.filename).name)
         codefile.write_text(code)
@@ -407,11 +412,15 @@ def main():
 
     log.info("Posting successful")
 
+
 from atproto_client.request import Request
+
+
 class MyRequest(Request):
     def __init__(self):
         super().__init__()
         self._client = httpx.Client(timeout=10.0, follow_redirects=True)
+
 
 def post_to_bluesky(post: Post, images: list[Image]):
     client = Client(request=MyRequest())
