@@ -18,7 +18,7 @@ import typer
 from atproto import Client, client_utils
 from atproto_client.exceptions import InvokeTimeoutError
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
-from mastodon import Mastodon
+from mastodon import Mastodon, MastodonServiceUnavailableError
 
 from cfgbot import github
 from cfgbot.index import Index, GithubIndex, GhidraIndex, GithubFunction, GhidraFunction
@@ -436,6 +436,7 @@ def post_to_bluesky(post: Post, images: list[Image]):
     )
 
 
+@stamina.retry(on=MastodonServiceUnavailableError, attempts=3, wait_initial=5.0)
 def post_to_mastodon(post: Post, images: list[Image]):
     mastodon = Mastodon(
         access_token=MASTODON_ACCESS_TOKEN, api_base_url=MASTODON_API_BASE_URL
