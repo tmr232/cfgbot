@@ -29,6 +29,10 @@ jobs:
           path: "ghidra-indices"
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          # Specific version is needed because of breaking changes in Bun 1.1.45
+          # See https://github.com/tmr232/function-graph-overview/issues/76 for details.
+          bun-version: "1.1.44"
       - run: |
           cd function-graph-overview
           bun install

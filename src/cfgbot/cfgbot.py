@@ -16,7 +16,6 @@ import stamina
 import structlog
 import typer
 from atproto import Client, client_utils
-from atproto_client.exceptions import InvokeTimeoutError
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
 from mastodon import Mastodon, MastodonServiceUnavailableError
 
