@@ -130,6 +130,8 @@ def github_message_template(post: GithubPost) -> list[MessagePart]:
 def masto_render_list(links: list[Link]) -> str:
     return "\n" + "\n".join(f"  {link.text} {link.url}" for link in links)
 
+def masto_link_list_length(links:list[Link])->int:
+    return len(masto_render_list([Link(text=link.text, url="x"*MASTODON_URL_LENGTH) for link in links]))
 
 def bsky_render_list(
     builder: client_utils.TextBuilder, links: list[Link]
@@ -151,7 +153,7 @@ def masto_get_message_length[P](template: MessageTemplate[P], post: P) -> int:
             case Link(text=text):
                 total_length += len(text) + MASTODON_URL_LENGTH + 1
             case list(links):
-                total_length += len(masto_render_list(links))
+                total_length += masto_link_list_length(links)
             case _:
                 raise TypeError(f"Unsupported part type {type(part)}")
     return total_length
