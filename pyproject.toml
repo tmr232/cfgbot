@@ -11,9 +11,11 @@ dependencies = [
     "httpx>=0.27.2",
     "keyring>=25.6.0",
     "mastodon-py>=1.8.1",
+    "mypy>=1.14.1",
     "orjson>=3.10.13",
     "pillow>=11.0.0",
     "pydantic>=2.10.4",
+    "pytest>=8.3.4",
     "rich>=13.9.4",
     "ruff>=0.8.4",
     "stamina>=24.3.0",
@@ -27,3 +29,10 @@ cfgbot = "cfgbot.cfgbot:app"
 
 [tool.uv]
 package = true
+
+[tool.pytest.ini_options]
+xfail_strict = true
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]

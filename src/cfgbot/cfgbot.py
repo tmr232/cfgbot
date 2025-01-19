@@ -4,23 +4,22 @@ import subprocess
 import tempfile
 import urllib.parse
 from pathlib import Path
-from typing import Self, Protocol
-from xml.etree import ElementTree
 
 import attrs
-import cairosvg
 import httpx
 import orjson
 import rich
 import stamina
 import structlog
 import typer
-from atproto import Client, client_utils
+from atproto import Client
 from atproto_client.models.app.bsky.embed.defs import AspectRatio
 from mastodon import Mastodon, MastodonServiceUnavailableError
 
 from cfgbot import github
+from cfgbot.image import Image
 from cfgbot.index import Index, GithubIndex, GhidraIndex, GithubFunction, GhidraFunction
+from cfgbot.message import Link, Post, GhidraPost, GithubPost
 
 BLUESKY_IDENTIFIER = os.getenv("BLUESKY_IDENTIFIER")
 BLUESKY_PASSWORD = os.getenv("BLUESKY_PASSWORD")
@@ -36,164 +35,11 @@ GHIDRA_RAW_URL_BASE = os.getenv("GHIDRA_RAW_URL_BASE")
 WEIGHT_OFFSET = 30
 MINIMAL_NODE_COUNT = 7
 
-SVG_OUTPUT_WIDTH = 2000
-
-BSKY_MAX_HEIGHT = 2000
-BSKY_MAX_WIDTH = 2000
-BSKY_MAX_TEXT_LENGTH = 300
-
 COLOR_SCHEMES = ["dark", "light"]
 
 log = structlog.get_logger()
 
 app = typer.Typer()
-
-
-@attrs.frozen(kw_only=True)
-class Size:
-    width: int
-    height: int
-
-
-def _parse_svg_length(value: str) -> int:
-    return int(value.rstrip("pt"))
-
-
-def get_svg_size(svg: bytes):
-    root = ElementTree.XML(svg)
-    return Size(
-        height=_parse_svg_length(root.attrib["height"]),
-        width=_parse_svg_length(root.attrib["width"]),
-    )
-
-
-@attrs.frozen(kw_only=True)
-class Image:
-    image_bytes: bytes
-    width: int
-    height: int
-    alt: str
-
-    @classmethod
-    def from_svg(cls, *, svg: bytes, alt: str) -> Self:
-        svg_size = get_svg_size(svg)
-        if svg_size.height > svg_size.width:
-            png = cairosvg.svg2png(svg, output_height=BSKY_MAX_HEIGHT)
-        else:
-            png = cairosvg.svg2png(svg, output_width=BSKY_MAX_WIDTH)
-        return cls(
-            image_bytes=png,
-            height=svg_size.height,
-            width=svg_size.width,
-            alt=alt,
-        )
-
-
-@attrs.frozen(kw_only=True)
-class Link:
-    text: str
-    url: str
-
-
-class Post(Protocol):
-    def into_bsky(self) -> client_utils.TextBuilder: ...
-    def into_mastodon(self) -> str: ...
-
-
-@attrs.frozen(kw_only=True)
-class GhidraPost:
-    project: str
-    version: str
-    filename: str
-    address: str
-    funcdef: str | None
-    svgs: list[Link]
-
-    @staticmethod
-    def _format_for_bluesky(post) -> client_utils.TextBuilder:
-        text = (
-            client_utils.TextBuilder()
-            .text(f"Project: {post.project} {post.version}")
-            .text("\n")
-            .text(f"File: {post.filename}")
-            .text("\n")
-            .text(f"Address: {post.address}")
-            .text("\n")
-            .text("\n")
-        )
-        if post.funcdef:
-            text = text.text(f"{post.funcdef}").text("\n").text("\n")
-        text = text.text("SVG: ")
-        for i, svg_link in enumerate(post.svgs):
-            if i > 0:
-                text = text.text(", ")
-            text = text.link(svg_link.text, svg_link.url)
-        return text
-
-    def into_bsky(self) -> client_utils.TextBuilder:
-        builder = self._format_for_bluesky(self)
-        post_text = builder.build_text()
-        if len(post_text) <= BSKY_MAX_TEXT_LENGTH:
-            return builder
-
-        # If the post is too long, we shorten the funcdef part by as much as necessary to fit.
-        to_remove = len(post_text) - BSKY_MAX_TEXT_LENGTH
-        if self.funcdef is None or to_remove > len(self.funcdef):
-            raise ValueError("Post too long regardless of funcdef length")
-
-        funcdef = f"{self.funcdef[:-to_remove-3]}..."
-        abbreviated = attrs.evolve(self, funcdef=funcdef)
-        return self._format_for_bluesky(abbreviated)
-
-    def into_mastodon(self) -> str:
-        svg = "\n".join(f"  {svg.text} {svg.url}" for svg in self.svgs)
-        return f"Project: {self.project} {self.version}\nFile: {self.filename}\nAddress: {self.address}\n\n{self.funcdef}\n\nSVG:\n{svg}"
-
-
-@attrs.frozen(kw_only=True)
-class GithubPost:
-    project: Link
-    code: Link
-    funcdef: str
-    svgs: list[Link]
-
-    @staticmethod
-    def _format_for_bluesky(post) -> client_utils.TextBuilder:
-        text = (
-            client_utils.TextBuilder()
-            .text("Project: ")
-            .link(post.project.text, post.project.url)
-            .text(
-                "\nFile: ",
-            )
-            .link(post.code.text, post.code.url)
-            .text(f"\n\n{post.funcdef}\n\n")
-            .text("SVG: ")
-        )
-        for i, svg_link in enumerate(post.svgs):
-            if i > 0:
-                text = text.text(", ")
-            text = text.link(svg_link.text, svg_link.url)
-        return text
-
-    def into_bsky(self) -> client_utils.TextBuilder:
-        builder = self._format_for_bluesky(self)
-        post_text = builder.build_text()
-        if len(post_text) <= BSKY_MAX_TEXT_LENGTH:
-            return builder
-
-        # If the post is too long, we shorten the funcdef part by as much as necessary to fit.
-        to_remove = len(post_text) - BSKY_MAX_TEXT_LENGTH
-        if to_remove > len(self.funcdef):
-            raise ValueError("Post too long regardless of funcdef length")
-
-        funcdef = f"{self.funcdef[:-to_remove-3]}..."
-        abbreviated = attrs.evolve(self, funcdef=funcdef)
-        return self._format_for_bluesky(abbreviated)
-
-    def into_mastodon(self) -> str:
-        svg = "\n".join(f"  {svg.text} {svg.url}" for svg in self.svgs)
-        return f"Project: {self.project.text} {self.project.url}\nFile: {self.code.text} {self.code.url}\n\n{self.funcdef}\n\nSVG:\n{svg}"
 
 
 def choose_function_from(indices: list[Index]):
