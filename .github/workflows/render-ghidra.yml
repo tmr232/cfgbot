@@ -41,13 +41,18 @@ jobs:
           cd function-graph-overview
           bun install
 
-      # Render
-      - run: bun run function-graph-overview/scripts/render-graph.ts ${{ inputs.graphPath }} > graph.svg
+      # Render Dark
+      - run: bun run function-graph-overview/scripts/render-graph.ts ${{ inputs.graphPath }} > dark.svg
+
+      # Render Light
+      - run: bun run function-graph-overview/scripts/render-graph.ts --colors light ${{ inputs.graphPath }} > light.svg
+
+
 
       # Upload result
       - uses: actions/upload-artifact@v4
         with:
-          name: graph.svg
-          path: graph.svg
+          name: SVG Output
+          path: "*.svg"
 
 
