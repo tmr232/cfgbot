@@ -1,0 +1,53 @@
+name: Render Ghidra Graph
+on:
+  workflow_dispatch:
+    inputs:
+      graphPath:
+        description: Path or URL to the graph
+        required: true
+        type: string
+
+
+jobs:
+  post:
+    name: "Render"
+    runs-on: "ubuntu-latest"
+    steps:
+      # Clone and install the Python project
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+
+      # Clone and install the typescript scripts
+      - uses: actions/checkout@v4
+        with:
+          repository: "tmr232/function-graph-overview"
+          ref: "v0.0.13"
+          path: "function-graph-overview"
+
+      # Fetch the Ghidra export indices
+      - uses: actions/checkout@v4
+        with:
+          repository: "v-p-b/ghidra-function-graph-datasets"
+          ref: "main"
+          path: "ghidra-indices"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Specific version is needed because of breaking changes in Bun 1.1.45
+          # See https://github.com/tmr232/function-graph-overview/issues/76 for details.
+          bun-version: "1.1.44"
+      - run: |
+          cd function-graph-overview
+          bun install
+
+      # Render
+      - run: bun run function-graph-overview/scripts/render-graph.ts ${{ inputs.graphPath }} > graph.svg
+
+      # Upload result
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graph.svg
+          path: graph.svg
+
+
