@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: "tmr232/function-graph-overview"
-          ref: "graph-script-diagnostics"
+          ref: "bc395101f52087c0235d210ad3dd0806fd1f9a4e"
           path: "function-graph-overview"
 
       # Fetch the Ghidra export indices
