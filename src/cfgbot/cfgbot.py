@@ -132,6 +132,7 @@ def generate_ghidra_post(
         if function.node_count >= MINIMAL_NODE_COUNT
     ]
     function: GhidraFunction = random.choice(interesting_functions)
+    log.info("Function selected", function=function)
     index_dir = index_locator.path.parent
     graph_path = index_dir / f"{function.address}.json"
     images = []
@@ -177,6 +178,7 @@ def generate_github_post(
         if function.node_count >= MINIMAL_NODE_COUNT
     ]
     function: GithubFunction = random.choice(interesting_functions)
+    log.info("Function selected", function=function)
     code = fetch_github_function(function, index)
     with tempfile.TemporaryDirectory() as tempdir:
         codefile = Path(tempdir, Path(function.filename).name)
