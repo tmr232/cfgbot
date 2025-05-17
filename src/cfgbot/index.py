@@ -1,8 +1,5 @@
-from pathlib import Path
 from typing import Literal, Union, Annotated
 
-import orjson
-import rich
 from pydantic import BaseModel, PositiveInt, Field, StringConstraints
 
 HexString = Annotated[str, StringConstraints(pattern=r"[0-9a-f]+")]
@@ -79,10 +76,3 @@ class Index(BaseModel):
     content: Union[GhidraIndex, GithubIndex] = Field(discriminator="index_type")
 
 
-if __name__ == "__main__":
-    index_data = orjson.loads(
-        Path(
-            r"C:\Code\github.com\tmr232\cfgbot\src\cfgbot\indices\python.json"
-        ).read_text()
-    )
-    Index(**index_data)

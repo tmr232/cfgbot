@@ -130,8 +130,14 @@ def github_message_template(post: GithubPost) -> list[MessagePart]:
 def masto_render_list(links: list[Link]) -> str:
     return "\n" + "\n".join(f"  {link.text} {link.url}" for link in links)
 
-def masto_link_list_length(links:list[Link])->int:
-    return len(masto_render_list([Link(text=link.text, url="x"*MASTODON_URL_LENGTH) for link in links]))
+
+def masto_link_list_length(links: list[Link]) -> int:
+    return len(
+        masto_render_list(
+            [Link(text=link.text, url="x" * MASTODON_URL_LENGTH) for link in links]
+        )
+    )
+
 
 def bsky_render_list(
     builder: client_utils.TextBuilder, links: list[Link]
