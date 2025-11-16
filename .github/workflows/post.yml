@@ -1,7 +1,7 @@
 name: Post
 on:
   schedule:
-    - cron: "33 * * * *"
+    - cron: "2 3 * * *"
   workflow_dispatch:
 
 jobs:
