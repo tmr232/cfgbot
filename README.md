@@ -1,6 +1,6 @@
 # CFGBot 🤖
 
-CFGBot is a friendly bot, posting control-flow-graphs every hour.
+CFGBot is a friendly bot, posting control-flow-graphs every day.
 
 You can find it on [Mastodon🐘] and [Bluesky🦋].
 
